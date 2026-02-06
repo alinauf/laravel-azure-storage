@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-06
+
 ### Added
 - Container-level visibility support via `getContainerAcl()` and `setContainerAcl()` on the client
 - `visibility()` now returns the actual container access level mapped to Flysystem visibility
