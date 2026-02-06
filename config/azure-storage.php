@@ -78,4 +78,21 @@ return [
         'default_permissions' => 'r',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Visibility Settings
+    |--------------------------------------------------------------------------
+    |
+    | Azure Blob Storage controls access at the container level, not per-file.
+    | The 'default' value is returned when the container access level cannot
+    | be determined. Set 'allow_set' to true to allow changing container
+    | access level via setVisibility() (requires appropriate permissions).
+    |
+    */
+
+    'visibility' => [
+        'default' => env('AZURE_STORAGE_VISIBILITY', 'private'),
+        'allow_set' => env('AZURE_STORAGE_ALLOW_SET_VISIBILITY', false),
+    ],
+
 ];

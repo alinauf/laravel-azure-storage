@@ -8,7 +8,9 @@ use AliNauf\AzureStorage\Tests\TestCase;
 use Illuminate\Support\Facades\Http;
 use League\Flysystem\Config;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\UnableToWriteFile;
+use League\Flysystem\Visibility;
 use PHPUnit\Framework\Attributes\Test;
 
 class AdapterTest extends TestCase
@@ -263,5 +265,158 @@ XML;
         Http::assertSent(function ($request) {
             return $request->hasHeader('Content-Type', 'application/x-custom');
         });
+    }
+
+    #[Test]
+    public function it_returns_private_visibility_when_container_has_no_public_access(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200, [
+                'x-ms-blob-public-access' => '',
+            ]),
+        ]);
+
+        $visibility = $this->adapter->visibility('test.txt');
+
+        $this->assertEquals(Visibility::PRIVATE, $visibility->visibility());
+    }
+
+    #[Test]
+    public function it_returns_public_visibility_when_container_has_blob_access(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200, [
+                'x-ms-blob-public-access' => 'blob',
+            ]),
+        ]);
+
+        $visibility = $this->adapter->visibility('test.txt');
+
+        $this->assertEquals(Visibility::PUBLIC, $visibility->visibility());
+    }
+
+    #[Test]
+    public function it_returns_public_visibility_when_container_has_container_access(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200, [
+                'x-ms-blob-public-access' => 'container',
+            ]),
+        ]);
+
+        $visibility = $this->adapter->visibility('test.txt');
+
+        $this->assertEquals(Visibility::PUBLIC, $visibility->visibility());
+    }
+
+    #[Test]
+    public function it_caches_visibility_result(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200, [
+                'x-ms-blob-public-access' => 'blob',
+            ]),
+        ]);
+
+        $this->adapter->visibility('test.txt');
+        $this->adapter->visibility('other.txt');
+
+        Http::assertSentCount(1);
+    }
+
+    #[Test]
+    public function it_throws_when_setting_visibility_by_default(): void
+    {
+        $this->expectException(UnableToSetVisibility::class);
+
+        $this->adapter->setVisibility('test.txt', Visibility::PUBLIC);
+    }
+
+    #[Test]
+    public function it_can_set_visibility_when_allowed(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200),
+        ]);
+
+        $client = new AzureBlobStorageClient(
+            accountName: 'testaccount',
+            accountKey: base64_encode('test-key-1234567890'),
+            container: 'testcontainer',
+        );
+
+        $adapter = new AzureBlobStorageAdapter(
+            client: $client,
+            publicUrl: '',
+            defaultVisibility: Visibility::PRIVATE,
+            allowSetVisibility: true,
+        );
+
+        $adapter->setVisibility('test.txt', Visibility::PUBLIC);
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'PUT'
+                && str_contains($request->url(), 'comp=acl')
+                && str_contains($request->url(), 'restype=container')
+                && $request->hasHeader('x-ms-blob-public-access', 'blob');
+        });
+    }
+
+    #[Test]
+    public function it_sets_private_visibility_by_omitting_public_access_header(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200),
+        ]);
+
+        $client = new AzureBlobStorageClient(
+            accountName: 'testaccount',
+            accountKey: base64_encode('test-key-1234567890'),
+            container: 'testcontainer',
+        );
+
+        $adapter = new AzureBlobStorageAdapter(
+            client: $client,
+            publicUrl: '',
+            defaultVisibility: Visibility::PRIVATE,
+            allowSetVisibility: true,
+        );
+
+        $adapter->setVisibility('test.txt', Visibility::PRIVATE);
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'PUT'
+                && str_contains($request->url(), 'comp=acl')
+                && ! $request->hasHeader('x-ms-blob-public-access');
+        });
+    }
+
+    #[Test]
+    public function it_updates_cached_visibility_after_set(): void
+    {
+        Http::fake([
+            "{$this->azureUrl}?comp=acl&restype=container" => Http::response('', 200),
+        ]);
+
+        $client = new AzureBlobStorageClient(
+            accountName: 'testaccount',
+            accountKey: base64_encode('test-key-1234567890'),
+            container: 'testcontainer',
+        );
+
+        $adapter = new AzureBlobStorageAdapter(
+            client: $client,
+            publicUrl: '',
+            defaultVisibility: Visibility::PRIVATE,
+            allowSetVisibility: true,
+        );
+
+        $adapter->setVisibility('test.txt', Visibility::PUBLIC);
+        $visibility = $adapter->visibility('test.txt');
+
+        $this->assertEquals(Visibility::PUBLIC, $visibility->visibility());
+
+        // Only 1 HTTP call (the PUT), no GET needed because cache was updated
+        Http::assertSentCount(1);
     }
 }

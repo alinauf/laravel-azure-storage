@@ -11,13 +11,19 @@ use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\UnableToDeleteFile;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\UnableToWriteFile;
+use League\Flysystem\Visibility;
 
 class AzureBlobStorageAdapter implements FilesystemAdapter
 {
+    protected ?string $cachedContainerVisibility = null;
+
     public function __construct(
         protected AzureBlobStorageClient $client,
         protected string $publicUrl = '',
+        protected string $defaultVisibility = Visibility::PRIVATE,
+        protected bool $allowSetVisibility = false,
     ) {}
 
     /**
@@ -149,19 +155,48 @@ class AzureBlobStorageAdapter implements FilesystemAdapter
     /**
      * Set the visibility of a file.
      *
-     * Visibility is controlled at the container level in Azure.
+     * Azure controls access at the container level, not per-file.
+     * By default this throws an exception. Set allowSetVisibility to true
+     * to allow changing the container's public access level.
+     *
+     * @throws UnableToSetVisibility
      */
     public function setVisibility(string $path, string $visibility): void
     {
-        // Visibility is controlled at the container level in Azure
+        if (! $this->allowSetVisibility) {
+            throw UnableToSetVisibility::atLocation(
+                $path,
+                'Azure Blob Storage controls visibility at the container level, not per-file. '
+                .'Set allow_set_visibility to true in your disk config to allow changing the container access level.'
+            );
+        }
+
+        $accessLevel = $visibility === Visibility::PUBLIC ? 'blob' : 'private';
+
+        $this->client->setContainerAcl($accessLevel);
+        $this->cachedContainerVisibility = $visibility;
     }
 
     /**
      * Get the visibility of a file.
+     *
+     * Returns the container's public access level mapped to Flysystem visibility.
+     * The result is cached for the lifetime of this adapter instance.
      */
     public function visibility(string $path): FileAttributes
     {
-        return new FileAttributes($path, null, 'public');
+        if ($this->cachedContainerVisibility === null) {
+            try {
+                $accessLevel = $this->client->getContainerAcl();
+                $this->cachedContainerVisibility = in_array($accessLevel, ['blob', 'container'])
+                    ? Visibility::PUBLIC
+                    : Visibility::PRIVATE;
+            } catch (\Throwable) {
+                $this->cachedContainerVisibility = $this->defaultVisibility;
+            }
+        }
+
+        return new FileAttributes($path, null, $this->cachedContainerVisibility);
     }
 
     /**

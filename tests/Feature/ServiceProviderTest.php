@@ -39,4 +39,11 @@ class ServiceProviderTest extends TestCase
         $this->assertEquals(3600, config('azure-storage.sas.default_expiry'));
         $this->assertEquals('r', config('azure-storage.sas.default_permissions'));
     }
+
+    #[Test]
+    public function it_has_default_visibility_configuration(): void
+    {
+        $this->assertEquals('private', config('azure-storage.visibility.default'));
+        $this->assertFalse(config('azure-storage.visibility.allow_set'));
+    }
 }

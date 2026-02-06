@@ -57,8 +57,10 @@ class AzureBlobStorageServiceProvider extends ServiceProvider
             );
 
             $publicUrl = $config['url'] ?? config('azure-storage.url') ?? '';
+            $defaultVisibility = $config['visibility']['default'] ?? config('azure-storage.visibility.default', 'private');
+            $allowSetVisibility = $config['visibility']['allow_set'] ?? config('azure-storage.visibility.allow_set', false);
 
-            $adapter = new AzureBlobStorageAdapter($client, $publicUrl);
+            $adapter = new AzureBlobStorageAdapter($client, $publicUrl, $defaultVisibility, $allowSetVisibility);
 
             $flysystem = new Filesystem($adapter, $config);
 

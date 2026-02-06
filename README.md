@@ -159,6 +159,69 @@ Storage::put('file.txt', 'Contents');
 $url = Storage::url('file.txt');
 ```
 
+## Private Files & Temporary URLs
+
+Azure Blob Storage controls access at the **container level**, not per-file like S3. This means all blobs in a container share the same access level. The recommended approach for serving private files is:
+
+1. Keep your container **private** (the default)
+2. Use `temporaryUrl()` to generate time-limited SAS-signed URLs for frontend display
+
+### Visibility Model
+
+| Azure Access Level | Flysystem Visibility | Description |
+|---|---|---|
+| Private (no header) | `private` | No anonymous access. All requests require authentication or SAS token. |
+| Blob | `public` | Anonymous read access for individual blobs only. |
+| Container | `public` | Anonymous read and list access for all blobs. |
+
+### Recommended Workflow
+
+```php
+use Illuminate\Support\Facades\Storage;
+
+$disk = Storage::disk('azure');
+
+// Store a file (private by default)
+$disk->put('invoices/invoice-001.pdf', $pdfContents);
+
+// Generate a temporary URL for display (expires in 30 minutes)
+$url = $disk->temporaryUrl('invoices/invoice-001.pdf', now()->addMinutes(30));
+
+// Use in a Blade template
+// <a href="{{ $url }}">Download Invoice</a>
+// <img src="{{ $url }}" alt="Preview">
+```
+
+### Visibility Configuration
+
+Add visibility settings to your disk config in `config/filesystems.php`:
+
+```php
+'azure' => [
+    'driver' => 'azure',
+    'account_name' => env('AZURE_STORAGE_ACCOUNT_NAME'),
+    'account_key' => env('AZURE_STORAGE_ACCOUNT_KEY'),
+    'container' => env('AZURE_STORAGE_CONTAINER'),
+    'visibility' => [
+        'default' => env('AZURE_STORAGE_VISIBILITY', 'private'),
+        'allow_set' => env('AZURE_STORAGE_ALLOW_SET_VISIBILITY', false),
+    ],
+],
+```
+
+- **`visibility.default`** — The fallback visibility when the container access level cannot be determined. Defaults to `private`.
+- **`visibility.allow_set`** — When `false` (default), calling `setVisibility()` throws an exception with a helpful message. Set to `true` to allow changing the container's public access level via the Flysystem API.
+
+```php
+// Check the container's visibility
+$visibility = $disk->getVisibility('any-path'); // 'public' or 'private'
+
+// Set visibility (only when allow_set is true)
+$disk->setVisibility('any-path', 'private');
+```
+
+> **Note:** Since Azure controls access at the container level, the `$path` argument to `visibility()` and `setVisibility()` is ignored — the operation applies to the entire container.
+
 ## SAS Token Generation
 
 For advanced SAS token generation, you can use the `SasTokenGenerator` directly:

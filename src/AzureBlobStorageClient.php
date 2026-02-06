@@ -235,6 +235,96 @@ class AzureBlobStorageClient
     }
 
     /**
+     * Get the container's public access level.
+     *
+     * @return string 'private', 'blob', or 'container'
+     *
+     * @throws AzureStorageException
+     */
+    public function getContainerAcl(): string
+    {
+        $date = $this->getDateHeader();
+
+        $queryParams = [
+            'comp' => 'acl',
+            'restype' => 'container',
+        ];
+
+        $url = $this->getContainerUrl().'?'.http_build_query($queryParams);
+
+        $headers = [
+            'x-ms-date' => $date,
+            'x-ms-version' => $this->apiVersion,
+        ];
+
+        $signature = $this->generateSignature(
+            verb: 'GET',
+            headers: $headers,
+            path: '',
+            queryParams: $queryParams,
+        );
+
+        $headers['Authorization'] = "SharedKey {$this->accountName}:{$signature}";
+
+        $response = $this->http()->withHeaders($headers)->get($url);
+
+        if (! $response->successful()) {
+            throw AzureStorageException::fromResponse($response->body(), $response->status());
+        }
+
+        $accessLevel = $response->header('x-ms-blob-public-access');
+
+        if ($accessLevel === null || $accessLevel === '') {
+            return 'private';
+        }
+
+        return $accessLevel;
+    }
+
+    /**
+     * Set the container's public access level.
+     *
+     * @param  string  $accessLevel  'private', 'blob', or 'container'
+     *
+     * @throws AzureStorageException
+     */
+    public function setContainerAcl(string $accessLevel): void
+    {
+        $date = $this->getDateHeader();
+
+        $queryParams = [
+            'comp' => 'acl',
+            'restype' => 'container',
+        ];
+
+        $url = $this->getContainerUrl().'?'.http_build_query($queryParams);
+
+        $headers = [
+            'x-ms-date' => $date,
+            'x-ms-version' => $this->apiVersion,
+        ];
+
+        if ($accessLevel !== 'private') {
+            $headers['x-ms-blob-public-access'] = $accessLevel;
+        }
+
+        $signature = $this->generateSignature(
+            verb: 'PUT',
+            headers: $headers,
+            path: '',
+            queryParams: $queryParams,
+        );
+
+        $headers['Authorization'] = "SharedKey {$this->accountName}:{$signature}";
+
+        $response = $this->http()->withHeaders($headers)->put($url);
+
+        if (! $response->successful()) {
+            throw AzureStorageException::fromResponse($response->body(), $response->status());
+        }
+    }
+
+    /**
      * Copy a blob to a new location.
      *
      * @throws AzureStorageException

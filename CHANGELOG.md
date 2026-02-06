@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Container-level visibility support via `getContainerAcl()` and `setContainerAcl()` on the client
+- `visibility()` now returns the actual container access level mapped to Flysystem visibility
+- `setVisibility()` can change container access level when `allow_set` is enabled
+- Visibility caching to avoid repeated API calls within a request lifecycle
+- Visibility configuration options (`visibility.default` and `visibility.allow_set`)
+- "Private Files & Temporary URLs" documentation section in README
+
+### Changed
+- `visibility()` no longer always returns `public` — it queries the container's actual access level
+- `setVisibility()` now throws `UnableToSetVisibility` by default instead of silently doing nothing
+
 ## [1.0.0] - 2026-01-13
 
 ### Added
